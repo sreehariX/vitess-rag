@@ -5,7 +5,7 @@ from google.genai import types
 
 
 client = genai.Client(
-    api_key='AIzaSyCfFGE5imXs5OlrngVWT_5xDUf0njThMM4',
+    api_key='',
     
 )
 
