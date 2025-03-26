@@ -280,47 +280,79 @@ export default function Home() {
 
         // Trigger search and wait for results
         setQuery(queryInput);
-        await search();
         
-        // Get the latest results after search is complete
-        const currentResults = useSearchStore.getState().results;
-        const currentSummary = useSearchStore.getState().summary;
-
-        // Create assistant message with the actual results
-        const assistantMessage: Message = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: currentSummary || (currentResults.length > 0 ? generateFallbackFromResults(currentResults) : 'No results found.'),
-            timestamp: new Date()
-        };
-
-        // Update messages with assistant response
-        const finalMessages = [...updatedMessages, assistantMessage];
+        // FIX: Don't add a temporary placeholder message, just show the user message
+        // and let the isGenerating state handle the UI feedback
         
-        const finalChat = {
-            ...updatedChat,
-            messages: finalMessages,
-            results: currentResults
-        };
-
-        // Update chats state with assistant message
-        const finalChats = activeChat
-            ? chats.map(chat => chat.id === activeChat ? finalChat : chat)
-            : [finalChat, ...chats];
-
-        setChats(finalChats);
+        try {
+            await search();
+            
+            // Get the latest results after search is complete
+            const currentResults = useSearchStore.getState().results;
+            const currentSummary = useSearchStore.getState().summary;
+    
+            // Create assistant message with the actual results
+            const assistantMessage: Message = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: currentSummary || (currentResults.length > 0 ? generateFallbackFromResults(currentResults) : 'No results found.'),
+                timestamp: new Date()
+            };
+    
+            // Update messages with assistant response
+            const finalMessages = [...updatedMessages, assistantMessage];
+            
+            const finalChat = {
+                ...updatedChat,
+                messages: finalMessages,
+                results: currentResults
+            };
+    
+            // Update chats state with assistant message
+            const finalChats = activeChat
+                ? chats.map(chat => chat.id === activeChat ? finalChat : chat)
+                : [finalChat, ...chats];
+    
+            setChats(finalChats);
+            
+            // Save chat with complete messages
+            console.log('Saving chat with all messages:', {
+                chatId: finalChat.id,
+                messageCount: finalChat.messages.length,
+                lastMessage: finalChat.messages[finalChat.messages.length - 1].content.substring(0, 50) + '...'
+            });
+    
+            await chatStorageService.saveChat(finalChat);
+        } catch (searchError) {
+            console.error('Error during search:', searchError);
+            
+            // If search fails, add an error message
+            const errorMessage: Message = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: 'Sorry, there was an error processing your query. Please try again.',
+                timestamp: new Date()
+            };
+            
+            const finalErrorMessages = [...updatedMessages, errorMessage];
+            
+            const errorChat = {
+                ...updatedChat,
+                messages: finalErrorMessages
+            };
+            
+            // Update chats state with error message
+            const errorChats = activeChat
+                ? chats.map(chat => chat.id === activeChat ? errorChat : chat)
+                : [errorChat, ...chats];
+            
+            setChats(errorChats);
+            
+            await chatStorageService.saveChat(errorChat);
+        }
         
         // End loading state
         setIsGenerating(false);
-
-        // Save chat with complete messages
-        console.log('Saving chat with all messages:', {
-            chatId: finalChat.id,
-            messageCount: finalChat.messages.length,
-            lastMessage: finalChat.messages[finalChat.messages.length - 1].content.substring(0, 50) + '...'
-        });
-
-        await chatStorageService.saveChat(finalChat);
 
         if (isFirstMessage) {
             setIsFirstMessage(false);
@@ -343,19 +375,30 @@ export default function Home() {
     // Add notification about results
     fallback += `> Found ${results.length} matching documents in the Vitess documentation.\n\n`;
     
+    // Create a references section for all URLs
+    let references = `## References\n\n`;
+    
     results.forEach((result, index) => {
       const score = (result.similarity_score * 100).toFixed(1);
-      fallback += `## ${index + 1}. ${result.metadata.title} (${score}% match)\n\n`;
+      fallback += `## ${index + 1}. ${result.metadata.title} (${score}% match) [[${index + 1}]](#reference-${index + 1})\n\n`;
       
       fallback += `- **Version**: ${result.metadata.version_or_commonresource}\n`;
-      fallback += `- **Source**: [View Documentation](${result.metadata.url})\n\n`;
+      fallback += `- **Source**: [View Documentation [${index + 1}]](${result.metadata.url})\n\n`;
       
       // Add document content directly
       fallback += `### Content\n\n`;
       fallback += `${result.document}\n\n`;
       
       fallback += `---\n\n`;
+      
+      // Add to references section
+      references += `<div id="reference-${index + 1}" class="reference-item">\n`;
+      references += `[${index + 1}] <a href="${result.metadata.url}" target="_blank" rel="noopener noreferrer">${result.metadata.url}</a>\n`;
+      references += `</div>\n\n`;
     });
+    
+    // Append references section at the end
+    fallback += `\n${references}`;
     
     return fallback;
   }
