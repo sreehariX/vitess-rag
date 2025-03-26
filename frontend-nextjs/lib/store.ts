@@ -172,5 +172,13 @@ export const useSearchStore = create<SearchState>((set, get) => ({
       });
     }
   },
-  clearResults: () => set({ results: [], summary: '', query: '', enhancedQuery: '' }),
+  clearResults: () => set({ 
+    results: [], 
+    summary: '', 
+    query: '', 
+    enhancedQuery: '',
+    isLoading: false,
+    isSummarizing: false,
+    error: null
+  }),
 })); 

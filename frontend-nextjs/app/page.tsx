@@ -24,6 +24,9 @@ export default function Home() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
+  // Add a ref to track current request
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
   // Check if the screen is mobile size
   const [isMobile, setIsMobile] = useState(false);
 
@@ -227,11 +230,46 @@ export default function Home() {
     }
   };
 
+  // Add a function to thoroughly clean up between chat switches
+  const forceCleanupCurrentChat = () => {
+    console.log('Performing thorough cleanup between chats');
+    
+    // Reset all search-related state
+    clearResults();
+    useSearchStore.getState().clearResults();
+    
+    // Reset UI states
+    setIsGenerating(false);
+    setIsRequestLocked(false);
+    
+    // Abort any pending requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Clear input field
+    setInput('');
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
     try {
-        // Set loading state first
+        // Lock request to prevent multiple submissions
+        if (isRequestLocked) return;
+        setIsRequestLocked(true);
+        
+        // Create a new abort controller for this request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
+        
+        // Reset any existing state first to prevent stale data
+        clearResults();
+        useSearchStore.getState().clearResults();
         setIsGenerating(true);
         
         // Create user message
@@ -256,111 +294,119 @@ export default function Home() {
             console.log('Created new chat:', currentChat.id);
         }
 
-        // Clear previous results and summary
-        clearResults();
-
         // Store the input and clear it immediately for better UX
         const queryInput = input;
         setInput('');
 
-        // Update chat with user message first
+        // Create a fresh copy of messages to avoid state issues
         const updatedMessages = [...currentChat.messages, userMessage];
         const updatedChat = {
             ...currentChat,
-            messages: updatedMessages
+            messages: updatedMessages,
+            results: [], // Reset results to prevent old data appearing
+            summary: '', // Reset summary
+            enhancedQuery: '' // Reset enhanced query
         };
 
-        // Update chats state with user message
+        // Update chats state with user message - ensure we're creating new references
         const updatedChats = activeChat
-            ? chats.map(chat => chat.id === activeChat ? updatedChat : chat)
+            ? chats.map(chat => chat.id === activeChat ? updatedChat : {...chat})
             : [updatedChat, ...chats];
 
         setChats(updatedChats);
         setActiveChat(updatedChat.id);
 
-        // Trigger search and wait for results
-        setQuery(queryInput);
-        
-        // FIX: Don't add a temporary placeholder message, just show the user message
-        // and let the isGenerating state handle the UI feedback
-        
-        try {
-            await search();
-            
-            // Get the latest results after search is complete
-            const currentResults = useSearchStore.getState().results;
-            const currentSummary = useSearchStore.getState().summary;
-    
-            // Create assistant message with the actual results
-            const assistantMessage: Message = {
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                content: currentSummary || (currentResults.length > 0 ? generateFallbackFromResults(currentResults) : 'No results found.'),
-                timestamp: new Date()
-            };
-    
-            // Update messages with assistant response
-            const finalMessages = [...updatedMessages, assistantMessage];
-            
-            const finalChat = {
-                ...updatedChat,
-                messages: finalMessages,
-                results: currentResults
-            };
-    
-            // Update chats state with assistant message
-            const finalChats = activeChat
-                ? chats.map(chat => chat.id === activeChat ? finalChat : chat)
-                : [finalChat, ...chats];
-    
-            setChats(finalChats);
-            
-            // Save chat with complete messages
-            console.log('Saving chat with all messages:', {
-                chatId: finalChat.id,
-                messageCount: finalChat.messages.length,
-                lastMessage: finalChat.messages[finalChat.messages.length - 1].content.substring(0, 50) + '...'
-            });
-    
-            await chatStorageService.saveChat(finalChat);
-        } catch (searchError) {
-            console.error('Error during search:', searchError);
-            
-            // If search fails, add an error message
-            const errorMessage: Message = {
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                content: 'Sorry, there was an error processing your query. Please try again.',
-                timestamp: new Date()
-            };
-            
-            const finalErrorMessages = [...updatedMessages, errorMessage];
-            
-            const errorChat = {
-                ...updatedChat,
-                messages: finalErrorMessages
-            };
-            
-            // Update chats state with error message
-            const errorChats = activeChat
-                ? chats.map(chat => chat.id === activeChat ? errorChat : chat)
-                : [errorChat, ...chats];
-            
-            setChats(errorChats);
-            
-            await chatStorageService.saveChat(errorChat);
-        }
-        
-        // End loading state
-        setIsGenerating(false);
+        // Explicitly save the chat with just the user message
+        await chatStorageService.saveChat({...updatedChat});
 
-        if (isFirstMessage) {
-            setIsFirstMessage(false);
-        }
+        // Trigger search and wait for results - use a timeout to ensure UI updates first
+        setTimeout(async () => {
+            try {
+                setQuery(queryInput);
+                await search();
+                
+                // Get the LATEST results after search is complete
+                const currentResults = useSearchStore.getState().results;
+                const currentSummary = useSearchStore.getState().summary;
+        
+                // Create assistant message with the actual results
+                const assistantMessage: Message = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: currentSummary || (currentResults.length > 0 ? generateFallbackFromResults(currentResults) : 'No results found.'),
+                    timestamp: new Date()
+                };
+        
+                // Update messages with assistant response - create fresh copies to avoid state issues
+                const finalMessages = [...updatedMessages, assistantMessage];
+                
+                const finalChat = {
+                    ...updatedChat,
+                    messages: finalMessages,
+                    results: [...currentResults] // Create a fresh copy
+                };
+        
+                // Update chats state with assistant message
+                setChats(prev => {
+                    const finalChats = prev.map(chat => 
+                        chat.id === updatedChat.id ? finalChat : chat
+                    );
+                    return finalChats;
+                });
+                
+                // Save chat with complete messages
+                console.log('Saving chat with all messages:', {
+                    chatId: finalChat.id,
+                    messageCount: finalChat.messages.length,
+                    lastMessage: finalChat.messages[finalChat.messages.length - 1].content.substring(0, 50) + '...'
+                });
+        
+                await chatStorageService.saveChat({...finalChat});
+                
+                // End loading states
+                setIsGenerating(false);
+                setIsRequestLocked(false);
 
+                if (isFirstMessage) {
+                    setIsFirstMessage(false);
+                }
+            } catch (searchError) {
+                console.error('Error during search:', searchError);
+                
+                // If search fails, add an error message
+                const errorMessage: Message = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: 'Sorry, there was an error processing your query. Please try again.',
+                    timestamp: new Date()
+                };
+                
+                const finalErrorMessages = [...updatedMessages, errorMessage];
+                
+                const errorChat = {
+                    ...updatedChat,
+                    messages: finalErrorMessages
+                };
+                
+                // Update chats state with error message
+                setChats(prev => {
+                    const errorChats = prev.map(chat => 
+                        chat.id === updatedChat.id ? errorChat : chat
+                    );
+                    return errorChats;
+                });
+                
+                await chatStorageService.saveChat({...errorChat});
+                
+                // End loading states
+                setIsGenerating(false);
+                setIsRequestLocked(false);
+            }
+        }, 0);
     } catch (error) {
         console.error('Error in handleSend:', error);
         setIsGenerating(false);
+        setIsRequestLocked(false);
     }
 };
 
@@ -403,22 +449,24 @@ export default function Home() {
     return fallback;
   }
 
+  // Use the cleanup in both handleNewChat and handleSelectChat
   const handleNewChat = () => {
     // Prevent creating new chat during an active request
     if (isRequestLocked) return;
     
+    // Perform thorough cleanup
+    forceCleanupCurrentChat();
+    
     setActiveChat(null);
     setIsFirstMessage(true);
-    
-    // Clear the search results with a small delay to prevent UI flicker
-    setTimeout(() => {
-      clearResults();
-    }, 50);
   };
 
   const handleSelectChat = async (id: string) => {
     try {
         console.log(`Selecting chat: ${id}`);
+        
+        // Perform thorough cleanup first
+        forceCleanupCurrentChat();
         
         // Load the chat from storage
         const loadedChat = await chatStorageService.getChat(id);
@@ -426,16 +474,26 @@ export default function Home() {
         if (loadedChat) {
             console.log(`Loaded chat ${id} with ${loadedChat.messages.length} messages`);
             
-            // Clear any ongoing search or results first
-            clearResults();
+            // Ensure the zustand store is completely reset
+            useSearchStore.getState().clearResults();
             
-            // Update the chat in the chats array
-            setChats(prev => prev.map(chat => 
-                chat.id === id ? { ...loadedChat, results: loadedChat.results || [] } : chat
-            ));
+            // Important: create deep copies of the chat data to avoid reference issues
+            const cleanLoadedChat = JSON.parse(JSON.stringify(loadedChat));
+            cleanLoadedChat.results = cleanLoadedChat.results || [];
             
-            // Set as active chat
-            setActiveChat(id);
+            // Update the chat in the chats array, ensuring we're not sharing references
+            setChats(prev => {
+                // Create a fresh copy of the entire chats array
+                const updatedChats = prev.map(chat => 
+                    chat.id === id ? cleanLoadedChat : {...chat, messages: [...chat.messages]}
+                );
+                return updatedChats;
+            });
+            
+            // Set as active chat - do this AFTER state is fully reset
+            setTimeout(() => {
+                setActiveChat(id);
+            }, 0);
             
             // Clear input
             setInput('');

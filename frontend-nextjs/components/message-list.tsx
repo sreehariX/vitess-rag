@@ -14,6 +14,7 @@ interface MessageListProps {
 export function MessageList({ messages, isGenerating }: MessageListProps) {
   const [processedMessages, setProcessedMessages] = useState<(Message & { contentHtml?: string })[]>([]);
   const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+  const [messageKey, setMessageKey] = useState(0);
 
   // Handle copy button click
   const handleCopy = useCallback((text: string, blockId: string) => {
@@ -24,6 +25,16 @@ export function MessageList({ messages, isGenerating }: MessageListProps) {
       }, 2000);
     });
   }, []);
+
+  // Force a full refresh when the message array reference changes
+  useEffect(() => {
+    // Increment the key to force a full re-render
+    setMessageKey(prev => prev + 1);
+    
+    // Reset state when messages change
+    setProcessedMessages([]);
+    setCopiedBlockId(null);
+  }, [messages]);
 
   useEffect(() => {
     const processMarkdown = async () => {
@@ -260,7 +271,7 @@ export function MessageList({ messages, isGenerating }: MessageListProps) {
   }, [processedMessages, handleCopy]);
 
   return (
-    <div className="w-full px-2 sm:px-4 md:max-w-3xl md:mx-auto" onClick={handleLinkClick}>
+    <div className="w-full px-2 sm:px-4 md:max-w-3xl md:mx-auto" onClick={handleLinkClick} key={messageKey}>
       {messages.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-center">
         <h1 className="text-xl md:text-2xl font-bold px-2" style={{ color: 'hsl(var(--color-silver))' }}>
@@ -274,7 +285,7 @@ export function MessageList({ messages, isGenerating }: MessageListProps) {
         <>
           {processedMessages.map((message) => (
             <div
-              key={message.id}
+              key={`${message.id}-${messageKey}`}
               className={`mb-4 md:mb-6 ${message.role === 'user' ? 'text-right' : 'text-left'}`}
             >
               <div 
