@@ -1,0 +1,5 @@
+selenium
+chromadb
+fastapi
+uvicorn
+google-genai
