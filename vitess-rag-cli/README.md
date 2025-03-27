@@ -1,8 +1,78 @@
 # Vitess RAG CLI
 
-A command-line interface for interacting with the Vitess RAG FastAPI endpoint.
+A command-line interface for interacting with the Vitess RAG FastAPI endpoint with AI-powered search and summarization.
 
 > **Note:** All CLI-related files should be kept strictly within the `\vitess-rag\vitess-rag-cli` directory.
+
+## Main Commands
+
+There are two primary ways to use the Vitess RAG CLI:
+
+### 1. Enhanced Query (AI-improved search)
+
+```bash
+# Basic usage with AI-enhanced query and summary only
+./vitess-rag -q "what is vitess"
+
+# Simplified syntax with positional arguments:
+./vitess-rag -q "query" v21.0                  # Specify just version (defaults for other params)
+./vitess-rag -q "query" v21.0 15               # Specify version and number of results 
+./vitess-rag -q "query" v21.0 15 false         # Specify all parameters
+
+# Show full results including search results
+./vitess-rag -q "what is vitess" -f
+
+# Traditional syntax with named flags
+./vitess-rag -q "what is vitess" -v "v21.0 (Stable)" -n 15 --include-resources=false
+```
+
+### 2. Raw Query (direct search)
+
+```bash
+# Basic usage with raw query and summary only
+./vitess-rag raw -q "how to add a new shard"
+
+# Simplified syntax with positional arguments:
+./vitess-rag raw -q "query" v21.0              # Specify just version (defaults for other params)
+./vitess-rag raw -q "query" v21.0 15           # Specify version and number of results
+./vitess-rag raw -q "query" v21.0 15 false     # Specify all parameters
+
+# Show full results including search results
+./vitess-rag raw -q "how to add a new shard" -f
+
+# Traditional syntax with named flags
+./vitess-rag raw -q "how to add a new shard" -v "v21.0 (Stable)" -n 15 --include-resources=false
+```
+
+## Simplified Syntax
+
+For convenience, you can provide values as positional arguments after the `-q` flag in this order:
+1. Version (e.g., "v21.0")
+2. Number of results (e.g., 15)
+3. Include resources (true/false)
+
+You can specify only the first parameter (version), the first two (version and number of results), or all three.
+
+**Note:** Short version formats (e.g., "v21.0") are automatically expanded to their full form (e.g., "v21.0 (Stable)") when the request is sent.
+
+Examples:
+```bash
+# Just specify version (use defaults for other params)
+./vitess-rag -q "query" v21.0
+
+# Specify version and number of results
+./vitess-rag -q "query" v21.0 15
+
+# Specify all parameters
+./vitess-rag -q "query" v21.0 15 false
+```
+
+## Default Values
+
+All commands use these defaults unless specified otherwise:
+- Version: v22.0 (Development)
+- Number of results: 10
+- Include common resources: true
 
 ## Installation
 
@@ -24,69 +94,114 @@ go get -u
 go build -o vitess-rag.exe
 ```
 
-## Usage
+## Additional Commands
 
-> **Important:** Always run the CLI from within the `vitess-rag-cli` directory
+### Standard Vector Search (No AI)
 
-### Basic Query
+Use this command for standard vector search without AI enhancement or summary:
 
 ```bash
-# Basic query with default settings (from vitess-rag-cli directory)
-./vitess-rag.exe query -q "what is vitess"
+# Standard vector search
+./vitess-rag query -q "vitctld commands"
 
-# Using the batch file
-vitess-rag query -q "what is vitess"
+# With positional args
+./vitess-rag query -q "vitctld commands" v21.0 5 false
+```
 
-# Specify the number of results
-vitess-rag query -q "what is vitess" -n 5
+### Test Gemini Model Directly
 
-# Specify a different version
-vitess-rag query -q "what is vitess" -v "v21.0 (Stable)"
+This command bypasses the RAG system and sends your prompt directly to Gemini:
+
+```bash
+# Test Gemini model directly
+./vitess-rag test -p "Explain how Vitess differs from other database proxies in a few sentences"
+```
+
+### View Available Versions
+
+```bash
+# List all available Vitess versions
+./vitess-rag versions
+```
+
+Available versions:
+```
+v22.0 (Development)   - Latest development version
+v21.0 (Stable)        - Latest stable release
+v20.0 (Stable)        - Stable release
+v19.0 (Archived)      - Archived version
+v18.0 (Archived)      - Archived version
+v17.0 (Archived)      - Archived version
+v16.0 (Archived)      - Archived version
+v15.0 (Archived)      - Archived version
+v14.0 (Archived)      - Archived version
+v13.0 (Archived)      - Archived version
+v12.0 (Archived)      - Archived version
+v11.0 (Archived)      - Archived version
 ```
 
 ### Advanced Options
 
 ```bash
-# Get JSON output
-vitess-rag query -q "what is vitess" -j
+# Get JSON output for any command
+./vitess-rag -q "what is vitess" -j
 
 # Use a different API endpoint
-vitess-rag query -q "what is vitess" -u "http://api.example.com/query"
+./vitess-rag -q "what is vitess" -u "http://api.example.com"
 ```
 
-### Available Flags
+### Getting Help
+
+```bash
+# Get general help
+./vitess-rag help
+
+# Get help for a specific command
+./vitess-rag help enhanced
+```
+
+## Available Flags
+
+For the main commands (`./vitess-rag -q` and `./vitess-rag raw -q`):
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--query` | `-q` | Search query | (required) |
 | `--version` | `-v` | Documentation version | "v22.0 (Development)" |
-| `--nresults` | `-n` | Number of results | 2 |
-| `--url` | `-u` | FastAPI endpoint URL | "http://localhost:8000/query" |
+| `--nresults` | `-n` | Number of results | 10 |
+| `--include-resources` | none | Include common resources | true |
+| `--url` | `-u` | FastAPI base URL | "http://localhost:8000" |
 | `--json` | `-j` | Output raw JSON response | false |
+| `--full` | `-f` | Show full results including search results | false |
+
+For the `test` command:
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--prompt` | `-p` | Prompt to send to Gemini | (required) |
+| `--url` | `-u` | FastAPI base URL | "http://localhost:8000" |
 
 ## Example Output
 
 ```
-Found 2 results for query: "what is vitess"
-===================================
+===== AI-GENERATED ANSWER =====
+# Vitess Sharding
 
-Result 1 (Score: 0.7990):
------------------------------------
-Title: Overview
-URL: https://vitess.io/docs/22.0/overview/
-Version: v22.0 (Development)
+Vitess uses horizontal sharding to scale databases. To shard a keyspace in Vitess, you need to:
 
-Content:
-Edit this page Documentation v22.0 (Development) Overview Overview High-level information about Vitess Pages in this section What Is Vitess Architecture Supported Databases Scalability Philosophy Cloud Native History The Vitess overview documentation provides general information about Vitess that's less immediately practical than what you'll find in Get Started section and the User Guides.
+1. Plan your sharding strategy and choose a primary vindex (sharding key)
+2. Create the target shards using `vtctlclient CreateShard`
+3. Run the `Reshard` workflow to copy data from source to target shards
+4. Switch reads and writes to the new shards using `SwitchReads` and `SwitchWrites`
+5. Cleanup the original shard once migration is complete
 
-Result 2 (Score: 0.7666):
------------------------------------
-Title: Architecture
-URL: https://vitess.io/docs/22.0/overview/architecture/
-Version: v22.0 (Development)
+The process preserves availability and ensures data consistency during migration.
 
-Content:
-Edit this page Documentation v22.0 (Development) Overview Architecture Architecture << What Is Vitess Supported Databases >> The Vitess platform consists of a number of server processes, command-line utilities, and web-based utilities, backed by a consistent metadata store...
+## References
+
+[1] https://vitess.io/docs/22.0/user-guides/configuration-basic/sharding/
+[2] https://vitess.io/docs/22.0/reference/vreplication/reshard/
+================================
 ```
 
 ## Directory Structure

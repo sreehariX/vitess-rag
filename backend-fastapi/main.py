@@ -44,6 +44,21 @@ class QueryRequest(BaseModel):
 class EmbeddingRequest(BaseModel):
     text: str
 
+class TestGeminiRequest(BaseModel):
+    prompt: str = "How does RLHF work?"
+
+class EnhanceQueryCLIRequest(BaseModel):
+    query: str
+    version: str = "v22.0 (Development)"
+    n_results: int = 10
+    include_resources: bool = True
+
+class RawQueryCLIRequest(BaseModel):
+    query: str
+    version: str = "v22.0 (Development)" 
+    n_results: int = 10
+    include_resources: bool = True
+
 def get_embedding(text: str, title="Vitess Documentation"):
     response = client.models.embed_content(
         model="models/text-embedding-004",
@@ -261,6 +276,22 @@ async def test_embedding(request: EmbeddingRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/testgeminiflash")
+async def test_gemini_flash(request: TestGeminiRequest):
+    try:
+        # Generate content using gemini-2.0-flash model
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=request.prompt
+        )
+        
+        # Return the generated content
+        return {"response": response.text}
+    
+    except Exception as e:
+        print(f"Error in test gemini flash: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     return {"message": "Vitess Documentation Search API - Use /docs to see the API documentation"}
@@ -471,6 +502,237 @@ async def inspect_database():
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.post("/enhance-query-cli")
+async def enhance_query_cli(request: EnhanceQueryCLIRequest):
+    try:
+        # Step 1: Enhance the query for better vector search
+        enhanced_query_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"""
+            You are a search query enhancer for Vitess documentation search system.
+            Your task is to improve the user's search query to make it more effective for semantic search in a vector database.
+            
+            Original query: "{request.query}"
+            
+            Enhance this query by:
+            1. Expanding the user query to make it more accurate in vector database search
+            2. Expanding abbreviations like 'CLI' to 'Command Line Interface'
+            3. Including synonyms for technical terms
+            4. Improving specificity while maintaining the original intent
+            
+            Return ONLY the enhanced query text with no explanations or additional text.
+            """
+        )
+        
+        enhanced_query = enhanced_query_response.text.strip()
+        
+        # Step 2: Query the vector database with the enhanced query
+        query_embedding = get_embedding(enhanced_query)
+        collection = chroma_client.get_collection("vitess_docs_v1")
+        
+        # Build the filter based on version and resource inclusion
+        where_filter = {}
+        
+        if request.version:
+            if request.include_resources:
+                where_filter = {
+                    "$or": [
+                        {"version_or_commonresource": request.version},
+                        {"title": {"$in": [
+                            "Learning Resources", 
+                            "Contribute", 
+                            "Troubleshoot", 
+                            "FAQ", 
+                            "Releases", 
+                            "Roadmap", 
+                            "Design Docs"
+                        ]}}
+                    ]
+                }
+            else:
+                where_filter = {"version_or_commonresource": request.version}
+        
+        # Execute the query with appropriate filters
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=request.n_results,
+            where=where_filter if where_filter else None,
+            include=['documents', 'metadatas', 'distances']
+        )
+        
+        # Format results
+        formatted_results = []
+        if results['documents'] and results['documents'][0]:
+            for i in range(len(results['documents'][0])):
+                result = {
+                    'document': results['documents'][0][i],
+                    'metadata': results['metadatas'][0][i],
+                    'similarity_score': 1 - results['distances'][0][i]
+                }
+                formatted_results.append(result)
+        
+        # If no results found, return early
+        if not formatted_results:
+            return {
+                "enhanced_query": enhanced_query,
+                "summary": "No results found for your query.",
+                "results": [],
+                "filter_used": where_filter if where_filter else "None"
+            }
+            
+        # Step 3: Format the results into a structured text for Gemini
+        formatted_content = ""
+        for index, result in enumerate(formatted_results):
+            formatted_content += f"""
+Document {index + 1}: {result['metadata']['title']}
+Content: {result['document']}
+URL: {result['metadata']['url']}
+Version: {result['metadata']['version_or_commonresource']}
+Similarity Score: {(result['similarity_score'] * 100):.1f}%
+"""
+        
+        # Step 4: Use Gemini to summarize the results based on the original query
+        summary_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"""
+You are a technical documentation assistant for Vitess. Your task is to answer the user's question about CLI commands and operations using the provided documentation snippets.
+
+Follow these guidelines when creating your response:
+1. Answer the question clearly and concisely based on the documentation provided
+2. Maintain technical accuracy and use Vitess terminology correctly
+3. Format your response with proper markdown for readability
+4. When referencing specific parts of the documentation, use citations like [1], [2], etc.
+5. For code examples or CLI commands, use proper markdown code blocks with appropriate syntax highlighting
+6. At the end of your response, include a "References" section with numbered links to the source documentation
+7. IMPORTANT: In the References section, ensure each unique URL appears only once. Do not duplicate URLs.
+   Example of correct formatting:
+   References:
+   [1] https://vitess.io/docs/22.0/overview/
+   [2] https://vitess.io/docs/22.0/overview/architecture/
+
+User question: {request.query}
+
+Here are the documentation snippets:
+{formatted_content}
+"""
+        )
+        
+        # Return the enhanced query, Gemini-generated summary, and the raw search results
+        return {
+            "enhanced_query": enhanced_query,
+            "summary": summary_response.text,
+            "results": formatted_results,
+            "filter_used": where_filter if where_filter else "None"
+        }
+    
+    except Exception as e:
+        print(f"Error in enhance query CLI: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rawquery-cli")
+async def raw_query_cli(request: RawQueryCLIRequest):
+    try:
+        # Use the raw query directly for vector search (no enhancement)
+        query_embedding = get_embedding(request.query)
+        collection = chroma_client.get_collection("vitess_docs_v1")
+        
+        # Build the filter based on version and resource inclusion
+        where_filter = {}
+        
+        if request.version:
+            if request.include_resources:
+                where_filter = {
+                    "$or": [
+                        {"version_or_commonresource": request.version},
+                        {"title": {"$in": [
+                            "Learning Resources", 
+                            "Contribute", 
+                            "Troubleshoot", 
+                            "FAQ", 
+                            "Releases", 
+                            "Roadmap", 
+                            "Design Docs"
+                        ]}}
+                    ]
+                }
+            else:
+                where_filter = {"version_or_commonresource": request.version}
+        
+        # Execute the query with appropriate filters
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=request.n_results,
+            where=where_filter if where_filter else None,
+            include=['documents', 'metadatas', 'distances']
+        )
+        
+        # Format results
+        formatted_results = []
+        if results['documents'] and results['documents'][0]:
+            for i in range(len(results['documents'][0])):
+                result = {
+                    'document': results['documents'][0][i],
+                    'metadata': results['metadatas'][0][i],
+                    'similarity_score': 1 - results['distances'][0][i]
+                }
+                formatted_results.append(result)
+        
+        # If no results found, return early
+        if not formatted_results:
+            return {
+                "summary": "No results found for your query.",
+                "results": [],
+                "filter_used": where_filter if where_filter else "None"
+            }
+            
+        # Format the results into a structured text for Gemini
+        formatted_content = ""
+        for index, result in enumerate(formatted_results):
+            formatted_content += f"""
+Document {index + 1}: {result['metadata']['title']}
+Content: {result['document']}
+URL: {result['metadata']['url']}
+Version: {result['metadata']['version_or_commonresource']}
+Similarity Score: {(result['similarity_score'] * 100):.1f}%
+"""
+        
+        # Use Gemini to summarize the results based on the original query
+        summary_response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"""
+You are a technical documentation assistant for Vitess. Your task is to answer the user's question about CLI commands and operations using the provided documentation snippets.
+
+Follow these guidelines when creating your response:
+1. Answer the question clearly and concisely based on the documentation provided
+2. Maintain technical accuracy and use Vitess terminology correctly
+3. Format your response with proper markdown for readability
+4. When referencing specific parts of the documentation, use citations like [1], [2], etc.
+5. For code examples or CLI commands, use proper markdown code blocks with appropriate syntax highlighting
+6. At the end of your response, include a "References" section with numbered links to the source documentation
+7. IMPORTANT: In the References section, ensure each unique URL appears only once. Do not duplicate URLs.
+   Example of correct formatting:
+   References:
+   [1] https://vitess.io/docs/22.0/overview/
+   [2] https://vitess.io/docs/22.0/overview/architecture/
+
+User question: {request.query}
+
+Here are the documentation snippets:
+{formatted_content}
+"""
+        )
+        
+        # Return the Gemini-generated summary and the raw search results
+        return {
+            "summary": summary_response.text,
+            "results": formatted_results,
+            "filter_used": where_filter if where_filter else "None"
+        }
+    
+    except Exception as e:
+        print(f"Error in raw query CLI: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
