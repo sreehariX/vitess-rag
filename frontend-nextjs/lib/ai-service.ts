@@ -79,9 +79,8 @@ Follow these guidelines when creating your response:
 1. Answer the question clearly and concisely based on the documentation provided
 2. Maintain technical accuracy and use Vitess terminology correctly
 3. Format your response with proper markdown for readability
-4. When referencing specific parts of the documentation, use citations like [1], [2], etc.
 5. For code examples or CLI commands, use proper markdown code blocks with appropriate syntax highlighting
-6. At the end of your response, include a "References" section with numbered links to the source documentation
+6. At the end of your response, include a "References" section with all the links in markdown format
 
 Here are the documentation snippets:
 ${formattedResults}
