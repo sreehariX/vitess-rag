@@ -26,7 +26,7 @@ export async function searchDocumentation(
   include_resources: boolean = true
 ): Promise<SearchResponse> {
   try {
-    const response = await fetch('http://localhost:8000/query', {
+    const response = await fetch('https://vitess-backend-api-fk655.ondigitalocean.app/query', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
