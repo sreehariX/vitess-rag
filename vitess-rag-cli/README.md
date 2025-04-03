@@ -79,7 +79,7 @@ All commands use these defaults unless specified otherwise:
 ### Prerequisites
 
 - Go 1.16 or higher
-- Vitess RAG FastAPI backend running (default: http://localhost:8000)
+- Vitess RAG FastAPI backend running (default: http://localhost:8000) or we use deployed url https://vitess-backend-api-fk655.ondigitalocean.app
 
 ### Building from Source
 
@@ -170,7 +170,7 @@ For the main commands (`./vitess-rag -q` and `./vitess-rag raw -q`):
 | `--version` | `-v` | Documentation version | "v22.0 (Development)" |
 | `--nresults` | `-n` | Number of results | 10 |
 | `--include-resources` | none | Include common resources | true |
-| `--url` | `-u` | FastAPI base URL | "http://localhost:8000" |
+| `--url` | `-u` | FastAPI base URL | "https://vitess-backend-api-fk655.ondigitalocean.app/" |
 | `--json` | `-j` | Output raw JSON response | false |
 | `--full` | `-f` | Show full results including search results | false |
 
@@ -179,7 +179,7 @@ For the `test` command:
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--prompt` | `-p` | Prompt to send to Gemini | (required) |
-| `--url` | `-u` | FastAPI base URL | "http://localhost:8000" |
+| `--url` | `-u` | FastAPI base URL | "https://vitess-backend-api-fk655.ondigitalocean.app/" |
 
 ## Example Output
 

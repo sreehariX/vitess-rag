@@ -632,7 +632,7 @@ func init() {
 	rootCmd.Flags().StringP("version", "v", "v22.0 (Development)", "Documentation version")
 	rootCmd.Flags().IntP("nresults", "n", 10, "Number of results")
 	rootCmd.Flags().Bool("include-resources", true, "Include common resources")
-	rootCmd.Flags().StringP("url", "u", "http://localhost:8000", "FastAPI base URL (without endpoint path)")
+	rootCmd.Flags().StringP("url", "u", "https://vitess-backend-api-fk655.ondigitalocean.app", "FastAPI base URL (without endpoint path)")
 	rootCmd.Flags().BoolP("json", "j", false, "Output raw JSON response")
 	rootCmd.Flags().BoolP("full", "f", false, "Show full results including search results (by default, only shows AI summary)")
 
@@ -642,7 +642,7 @@ func init() {
 		cmd.Flags().StringP("version", "v", "v22.0 (Development)", "Documentation version")
 		cmd.Flags().IntP("nresults", "n", 10, "Number of results")
 		cmd.Flags().Bool("include-resources", true, "Include common resources")
-		cmd.Flags().StringP("url", "u", "http://localhost:8000", "FastAPI base URL (without endpoint path)")
+		cmd.Flags().StringP("url", "u", "https://vitess-backend-api-fk655.ondigitalocean.app", "FastAPI base URL (without endpoint path)")
 		cmd.Flags().BoolP("json", "j", false, "Output raw JSON response")
 		cmd.MarkFlagRequired("query")
 	}
@@ -663,7 +663,7 @@ func init() {
 
 	// Setup test command
 	testCmd.Flags().StringP("prompt", "p", "", "Prompt to send to Gemini model")
-	testCmd.Flags().StringP("url", "u", "http://localhost:8000", "FastAPI base URL (without endpoint path)")
+	testCmd.Flags().StringP("url", "u", "https://vitess-backend-api-fk655.ondigitalocean.app", "FastAPI base URL (without endpoint path)")
 	testCmd.MarkFlagRequired("prompt")
 	rootCmd.AddCommand(testCmd)
 
@@ -726,7 +726,7 @@ Available Flags:
   -v, --version            Documentation version (default "v22.0 (Development)")
   -n, --nresults           Number of results (default 10)
       --include-resources  Include common resources (default true)
-  -u, --url                FastAPI base URL (default "http://localhost:8000")
+  -u, --url                FastAPI base URL (default "https://vitess-backend-api-fk655.ondigitalocean.app")
   -j, --json               Output raw JSON response
   -f, --full               Show full results including search results
 
