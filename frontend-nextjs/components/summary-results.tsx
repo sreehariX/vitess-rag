@@ -28,7 +28,7 @@ export function SummaryResults({ currentChat }: SummaryResultsProps) {
       <div className="flex items-center justify-center p-4 md:p-8">
         <div className="relative">
           <span className="text-sm md:text-base text-gray-400 animate-pulse">
-            Searching Vitess documentation
+            Summarizing response ...
             <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
           </span>
         </div>
@@ -55,7 +55,7 @@ export function SummaryResults({ currentChat }: SummaryResultsProps) {
       <div className="prose prose-invert max-w-none text-ivory text-sm md:text-base">
         {isSummarizing && (
           <div className="mb-2 text-xs md:text-sm text-gray-400 relative">
-            <span>Searching Vitess documentation</span>
+            <span>Summarizing response ...</span>
             <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
           </div>
         )}
