@@ -1,5 +1,5 @@
 selenium
-chromadb
+chromadb==0.6.3
 fastapi
 uvicorn
 google-genai
